@@ -13,7 +13,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 class ConservativeCleanupServiceTest {
   @Test
   void returnsValidatedCleanupResultFromStructuredModelResult() {
-    CleanupModelResult modelResult = validResult("um ship it", "Ship it.");
+    CleanupModelResult modelResult = validResult("Ship it.");
     ConservativeCleanupService service = new ConservativeCleanupService(new QueueCleanupModelClient(modelResult));
 
     CleanupResult result = service.clean("um ship it");
@@ -26,22 +26,22 @@ class ConservativeCleanupServiceTest {
   }
 
   @Test
-  void retriesMalformedStructuredOutputBeforeReturningCleanupResult() {
-    ConservativeCleanupService service = new ConservativeCleanupService(new QueueCleanupModelClient(
-        validResult("different raw transcript", "Ship it."),
-        validResult("um ship it", "Ship it.")
-    ));
+  void returnsTheOriginalRawTranscriptWithoutAskingTheModelToRepeatIt() {
+    ConservativeCleanupService service = new ConservativeCleanupService(
+        new QueueCleanupModelClient(validResult("Ship it."))
+    );
 
     CleanupResult result = service.clean("um ship it");
 
+    assertEquals("um ship it", result.rawTranscript());
     assertEquals("Ship it.", result.cleanedText());
   }
 
   @Test
   void mapsRepeatedMalformedStructuredOutputToRetryableCleanupFailure() {
     ConservativeCleanupService service = new ConservativeCleanupService(new QueueCleanupModelClient(
-        validResult("different raw transcript", "Ship it."),
-        validResult("um ship it", " ")
+        validResult(" "),
+        validResult(" ")
     ));
 
     CleanupProviderUnavailableException exception = assertThrows(
@@ -71,7 +71,7 @@ class ConservativeCleanupServiceTest {
   void retriesStructuredOutputParsingFailuresBeforeReturningCleanupResult() {
     ConservativeCleanupService service = new ConservativeCleanupService(new QueueCleanupModelClient(
         new IllegalArgumentException("structured output parse failed"),
-        validResult("um ship it", "Ship it.")
+        validResult("Ship it.")
     ));
 
     CleanupResult result = service.clean("um ship it");
@@ -90,8 +90,8 @@ class ConservativeCleanupServiceTest {
   })
   void rejectsFormattedCleanedTextAsMalformedOutput(String formattedCleanedText) {
     ConservativeCleanupService service = new ConservativeCleanupService(new QueueCleanupModelClient(
-        validResult("um ship it", formattedCleanedText),
-        validResult("um ship it", "Ship it.")
+        validResult(formattedCleanedText),
+        validResult("Ship it.")
     ));
 
     CleanupResult result = service.clean("um ship it");
@@ -102,8 +102,8 @@ class ConservativeCleanupServiceTest {
   @Test
   void rejectsMissingCleanupUncertaintiesAsMalformedOutput() {
     ConservativeCleanupService service = new ConservativeCleanupService(new QueueCleanupModelClient(
-        new CleanupModelResult("um ship it", "Ship it.", null),
-        validResult("um ship it", "Ship it.")
+        new CleanupModelResult("Ship it.", null),
+        validResult("Ship it.")
     ));
 
     CleanupResult result = service.clean("um ship it");
@@ -115,7 +115,6 @@ class ConservativeCleanupServiceTest {
   void rejectsMalformedCleanupUncertainties() {
     ConservativeCleanupService service = new ConservativeCleanupService(new QueueCleanupModelClient(
         new CleanupModelResult(
-            "um ship it",
             "Ship it.",
             List.of(new CleanupModelResult.CleanupModelUncertainty(
                 "",
@@ -123,7 +122,7 @@ class ConservativeCleanupServiceTest {
                 "Needs review."
             ))
         ),
-        validResult("um ship it", "Ship it.")
+        validResult("Ship it.")
     ));
 
     CleanupResult result = service.clean("um ship it");
@@ -131,9 +130,8 @@ class ConservativeCleanupServiceTest {
     assertEquals("Ship it.", result.cleanedText());
   }
 
-  private static CleanupModelResult validResult(String rawTranscript, String cleanedText) {
+  private static CleanupModelResult validResult(String cleanedText) {
     return new CleanupModelResult(
-        rawTranscript,
         cleanedText,
         List.of(new CleanupModelResult.CleanupModelUncertainty(
             "maybe",

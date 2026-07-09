@@ -19,7 +19,6 @@ class SpringAiCleanupModelClient implements CleanupModelClient {
       You perform Conservative Cleanup for English-First Cleanup.
 
       Return a structured Cleanup Result with:
-      - rawTranscript: the exact Raw Transcript input, unchanged.
       - cleanedText: Plain Text Cleanup only.
       - uncertainties: Cleanup Uncertainties with text, reasonCategory, and reason.
 
@@ -57,7 +56,7 @@ class SpringAiCleanupModelClient implements CleanupModelClient {
     return chatClient.prompt()
         .system(CONSERVATIVE_CLEANUP_PROMPT)
         .user(user -> user.text("""
-            Clean this Raw Transcript and return only the structured Cleanup Result.
+            Clean this Raw Transcript and return only cleanedText and uncertainties.
 
             Raw Transcript:
             {rawTranscript}

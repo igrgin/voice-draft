@@ -96,6 +96,17 @@ a real `OPENAI_API_KEY`, then submit a short browser recording through the
 frontend. That manual check may call paid external services and should not be
 required for routine local development or CI.
 
+### Diagnosing a live cleanup failure
+
+Restart the backend after changing its code, then run the production-profile
+command above and submit a short recording. Each failed cleanup attempt is
+written to the backend console at `WARN` level with its validation or provider
+error and stack trace. Audio and Raw Transcript are not deliberately logged.
+
+The backend owns `rawTranscript` in the returned Cleanup Result. The cleanup
+model returns only `cleanedText` and `uncertainties`, so a model cannot fail a
+request by changing its copy of the raw transcript.
+
 ## MVP Boundaries
 
 The MVP is English-First Cleanup and Plain Text Cleanup. Conservative Cleanup

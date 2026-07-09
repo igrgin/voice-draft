@@ -5,7 +5,6 @@ import java.util.Objects;
 import java.util.regex.Pattern;
 
 public record CleanupModelResult(
-    String rawTranscript,
     String cleanedText,
     List<CleanupModelUncertainty> uncertainties
 ) {
@@ -22,13 +21,10 @@ public record CleanupModelResult(
         .map(CleanupModelUncertainty::toCleanupUncertainty)
         .toList();
 
-    return new CleanupResult(rawTranscript, cleanedText, mappedUncertainties);
+    return new CleanupResult(expectedRawTranscript, cleanedText, mappedUncertainties);
   }
 
   private void validate(String expectedRawTranscript) {
-    if (!expectedRawTranscript.equals(rawTranscript)) {
-      throw new MalformedCleanupModelResultException("Cleanup provider changed the Raw Transcript.");
-    }
     if (cleanedText == null || cleanedText.isBlank()) {
       throw new MalformedCleanupModelResultException("Cleanup provider returned blank Cleaned Text.");
     }

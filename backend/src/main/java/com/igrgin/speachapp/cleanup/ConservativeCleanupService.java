@@ -1,6 +1,8 @@
 package com.igrgin.speachapp.cleanup;
 
 import com.igrgin.speachapp.config.AiProperties;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
@@ -12,6 +14,7 @@ import org.springframework.stereotype.Service;
 )
 public class ConservativeCleanupService implements TranscriptCleaner {
   private static final int MAX_ATTEMPTS = 2;
+  private static final Logger LOGGER = LoggerFactory.getLogger(ConservativeCleanupService.class);
 
   private final CleanupModelClient cleanupModelClient;
 
@@ -32,10 +35,16 @@ public class ConservativeCleanupService implements TranscriptCleaner {
           );
         }
         return result.toCleanupResult(rawTranscript);
-      } catch (CleanupModelResult.MalformedCleanupModelResultException exception) {
-        lastFailure = exception;
       } catch (RuntimeException exception) {
         lastFailure = exception;
+        LOGGER.warn(
+            "Cleanup attempt {}/{} failed with {}: {}",
+            attempt,
+            MAX_ATTEMPTS,
+            exception.getClass().getSimpleName(),
+            exception.getMessage(),
+            exception
+        );
       }
     }
 
