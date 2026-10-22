@@ -21,3 +21,7 @@ backend/src/main/resources/application-*.local.yml
 .env
 .env.*
 !.env.example
+
+# Compiler state and IDE build output
+*.tsbuildinfo
+/out/
