@@ -23,6 +23,7 @@ import {
 } from "./api";
 
 import { ThemePicker } from "./ThemePicker";
+import { DictationGuide } from "./DictationGuide";
 
 type WorkflowPhase = "idle" | "recording" | "processing" | "review" | "error";
 type ProcessingStep = "transcribing" | "cleaning";
@@ -359,6 +360,7 @@ export function App() {
             {cleanupEnabled ? "Remove fillers and apply spoken paragraph commands." : "Transcription only, exactly as returned."}
           </p>
           <p className="muted">Switch modes to compare the same transcript. Edits are kept separately.</p>
+          <DictationGuide />
         </div>
 
         <ol className="steps" aria-label="Workflow progress">

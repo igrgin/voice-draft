@@ -18,6 +18,20 @@ test("keeps the Review Console usable when rails stack at phone width", async ({
   const dictationRequests = await installMockedDictationWorkflow(page);
 
   await page.goto("/");
+  const guide = page.locator("details.dictation-guide");
+  const guideToggle = guide.locator("summary");
+  await expect(guideToggle).toHaveText("Dictation guide");
+  await expect(guide).not.toHaveAttribute("open");
+  await guideToggle.focus();
+  await page.keyboard.press("Enter");
+  await expect(guide).toHaveAttribute("open", "");
+  await expect(guide.getByRole("heading", { name: "New paragraph" })).toBeVisible();
+  await expect(guide.getByLabel("Example Cleaned Text")).toContainText("Next thought.");
+  await expect(guide.getByRole("heading", { name: "Speak naturally" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  expect(dictationRequests).toHaveLength(0);
+  await page.keyboard.press("Space");
+  await expect(guide).not.toHaveAttribute("open");
   await page.getByRole("button", { name: "Start recording" }).click();
   await page.getByRole("button", { name: "Stop recording" }).click();
 

@@ -13,6 +13,7 @@ preserving your wording and meaning.
 - Switch AI cleanup on or off to compare the **same transcript**, without
   transcribing the recording again.
 - Say “new paragraph” to insert a paragraph break during cleanup.
+- Open the Dictation guide beside AI cleanup for the supported command and examples.
 - Edit each view separately, then copy or export your text.
 - Review flagged ambiguities and choose system, light or dark appearance.
 
