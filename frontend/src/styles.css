@@ -1,11 +1,34 @@
 :root {
-  color-scheme: light;
+  color-scheme: light dark;
+  --page: light-dark(#f4f6f8, #10151e);
+  --panel: light-dark(#ffffff, #19212e);
+  --text: light-dark(#1f2937, #e4eaf3);
+  --editor: light-dark(#fbfcfe, #141b26);
+  --editor-text: light-dark(#20261f, #e4eaf3);
+  --border: light-dark(#d8ddd1, #354256);
+  --muted: light-dark(#5b6472, #a7b4c8);
+  --label: light-dark(#61705a, #a9bbc1);
+  --accent: light-dark(#1d4ed8, #a2c4ff);
+  --accent-border: light-dark(#8ab4f8, #527cb9);
+  --accent-surface: light-dark(#edf4ff, #243654);
+  --success-surface: light-dark(#e8f7f3, #173633);
+  --success-text: light-dark(#0f766e, #91dcd1);
+  --error-surface: light-dark(#fff3ed, #40251f);
+  --error-text: light-dark(#9b3f20, #ffb79c);
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: #f4f6f8;
-  color: #1f2937;
+  background: var(--page);
+  color: var(--text);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
 }
 
 * {
@@ -35,9 +58,9 @@ textarea {
 .workspace,
 .inspector {
   min-width: 0;
-  border: 1px solid #d8ddd1;
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: #ffffff;
+  background: var(--panel);
 }
 
 .rail,
@@ -57,7 +80,7 @@ textarea {
 .eyebrow,
 .card-label {
   margin: 0;
-  color: #61705a;
+  color: var(--label);
   font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0;
@@ -116,23 +139,23 @@ h1 {
   align-items: center;
   gap: 0.5rem;
   min-height: 2.25rem;
-  border: 1px solid #e0e4dc;
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 0.5rem 0.65rem;
-  color: #5b6472;
+  color: var(--muted);
 }
 
 .steps li.active,
 .steps li.complete {
-  border-color: #8ab4f8;
-  color: #1d4ed8;
+  border-color: var(--accent-border);
+  color: var(--accent);
 }
 
 .tabs {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-  border-bottom: 1px solid #d8ddd1;
+  border-bottom: 1px solid var(--border);
   padding: 0.75rem;
 }
 
@@ -141,15 +164,15 @@ h1 {
   border: 1px solid transparent;
   border-radius: 8px;
   background: transparent;
-  color: #5b6472;
+  color: var(--muted);
   cursor: pointer;
   padding: 0.35rem 0.65rem;
 }
 
 .tabs button.active {
-  border-color: #8ab4f8;
-  background: #edf4ff;
-  color: #1d4ed8;
+  border-color: var(--accent-border);
+  background: var(--accent-surface);
+  color: var(--accent);
 }
 
 .text-surface {
@@ -164,10 +187,10 @@ pre {
   height: 100%;
   min-height: 22rem;
   margin: 0;
-  border: 1px solid #d8ddd1;
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: #fbfcfe;
-  color: #20261f;
+  background: var(--editor);
+  color: var(--editor-text);
   padding: 1rem;
   resize: none;
   white-space: pre-wrap;
@@ -183,8 +206,8 @@ pre {
 }
 
 .status-card {
-  background: #e8f7f3;
-  color: #0f766e;
+  background: var(--success-surface);
+  color: var(--success-text);
 }
 
 .status-card p {
@@ -192,8 +215,8 @@ pre {
 }
 
 .problem {
-  background: #fff3ed;
-  color: #9b3f20;
+  background: var(--error-surface);
+  color: var(--error-text);
 }
 
 .problem span,
@@ -203,7 +226,7 @@ pre {
 
 .problem small {
   margin-top: 0.25rem;
-  color: #79402e;
+  color: var(--error-text);
   font-size: 0.75rem;
 }
 
@@ -213,10 +236,10 @@ pre {
   justify-content: center;
   gap: 0.5rem;
   min-height: 2.5rem;
-  border: 1px solid #bcc7d6;
+  border: 1px solid var(--border);
   border-radius: 8px;
-  background: #ffffff;
-  color: #1d4ed8;
+  background: var(--panel);
+  color: var(--accent);
   cursor: pointer;
   font-weight: 700;
 }
@@ -242,7 +265,7 @@ pre {
 }
 
 .uncertainties li {
-  border: 1px solid #d8ddd1;
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 0.75rem;
 }
@@ -254,7 +277,7 @@ pre {
 
 .uncertainties span,
 .muted {
-  color: #5b6472;
+  color: var(--muted);
 }
 
 .uncertainties p {
@@ -298,4 +321,63 @@ pre {
   pre {
     min-height: 24rem;
   }
+}
+
+.theme-picker {
+  min-width: 0;
+  margin: auto 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.theme-picker legend {
+  margin-bottom: 0.5rem;
+}
+
+.theme-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--editor);
+}
+
+.theme-options button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  min-height: 2.5rem;
+  padding: 0.4rem 0.2rem;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.theme-options svg {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+.theme-options button[aria-pressed="true"] {
+  border-color: var(--accent-border);
+  background: var(--accent-surface);
+  color: var(--accent);
+}
+
+button:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+textarea::placeholder {
+  color: var(--muted);
+  opacity: 1;
 }

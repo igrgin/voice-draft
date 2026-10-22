@@ -22,6 +22,8 @@ import {
   type RecordingMimeType,
 } from "./api";
 
+import { ThemePicker } from "./ThemePicker";
+
 type WorkflowPhase = "idle" | "recording" | "processing" | "review" | "error";
 type ProcessingStep = "uploading" | "transcribing" | "cleaning";
 type OutputAction = "copied" | "exported" | null;
@@ -336,6 +338,7 @@ export function App() {
           />
           <Step icon={<FileText aria-hidden />} label="Review" active={phase === "review"} complete={phase === "review"} />
         </ol>
+        <ThemePicker />
       </section>
 
       <section className="workspace" aria-label="Cleanup Result">
