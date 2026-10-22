@@ -1,136 +1,102 @@
-# smart-AI-text-to-speach-app
+# Voice Draft
 
-A web app for turning recorded speech into Cleaned Text. The MVP keeps the
-frontend provider-blind: browser audio is uploaded to the Spring Boot backend,
-and backend-owned AI configuration handles transcription and Conservative
-Cleanup.
+Record a thought, turn it into text, and decide how much cleanup it needs.
+Voice Draft is a React and Spring Boot app that transcribes speech with OpenAI,
+then optionally removes fillers and applies spoken paragraph breaks while
+preserving your wording and meaning.
 
-## Local Setup
+![Voice Draft showing a cleaned recording in dark mode](docs/images/voice-draft.png)
 
-This repository has two runnable app surfaces:
+## What you can do
 
-- `backend/` - Spring Boot API for `POST /api/dictations`.
-- `frontend/` - Vite React Review Console.
+- Record directly in the browser and review the original transcript.
+- Switch AI cleanup on or off to compare the **same transcript**, without
+  transcribing the recording again.
+- Say “new paragraph” to insert a paragraph break during cleanup.
+- Edit each view separately, then copy or export your text.
+- Review flagged ambiguities and choose system, light or dark appearance.
 
-Prerequisites:
+Cleanup preserves hedging such as “I think” and “maybe.” It is intended to make
+spoken text readable, rather than summarize it or change its tone.
 
-- JDK 25
-- Maven
-- Node.js 24.18.0 or newer
-- npm
+## How it works
 
-Install frontend dependencies once:
+1. **Capture:** the browser records audio with `MediaRecorder` and uploads it to
+   the Spring Boot API.
+2. **Transcribe:** a backend Spring AI adapter sends the audio to OpenAI. The
+   browser retains the returned Raw Transcript.
+3. **Clean up, optionally:** the browser sends that exact transcript to a separate
+   cleanup endpoint. Spring AI requests structured Cleaned Text and review
+   uncertainties from OpenAI.
+4. **Review:** the browser caches both results and keeps edits separately.
+   Switching modes reuses those results; retrying cleanup reuses the transcript.
+
+The OpenAI key stays on the backend. Transcription and cleanup sit behind
+separate Java interfaces, so their real adapters can be replaced with fakes in
+tests and local demos.
+
+| Layer | Stack |
+| --- | --- |
+| Browser | React 19, TypeScript, Vite 8, MediaRecorder |
+| API | Java 25, Spring Boot 4.1, Spring AI 2.0, Maven |
+| AI | `gpt-transcribe` for transcription; `gpt-6-luna` for optional cleanup |
+| Tests | JUnit, Mockito, Vitest, React Testing Library, Playwright |
+
+## Run locally
+
+You need JDK 25, Maven, Node.js 24.18+ and npm. Allow microphone access when
+prompted. Use two terminals from the repository root.
 
 ```bash
-npm --prefix frontend install
+git clone https://github.com/igrgin/voice-draft.git
+cd voice-draft
+npm --prefix frontend ci
 ```
 
-Start the backend with the default fake provider mode:
+**Backend — real OpenAI calls:** make `OPENAI_API_KEY` available in your shell,
+then run:
+
+```bash
+SPRING_PROFILES_ACTIVE=prod mvn -f backend/pom.xml spring-boot:run
+```
+
+For a **simulated demo without an API key**, omit the profile:
 
 ```bash
 mvn -f backend/pom.xml spring-boot:run
 ```
 
-Start the frontend in another terminal:
+**Frontend — in the second terminal:**
 
 ```bash
 npm --prefix frontend run dev
 ```
 
-The frontend dev server proxies `/api` calls to `http://127.0.0.1:8080`.
+Open [localhost:5173](http://localhost:5173). The frontend proxies API requests
+to the backend on port 8080. The `prod` profile selects real providers; both
+commands above run the app locally.
 
-Run the full automated test suite:
+## Test and build
 
 ```bash
 mvn -f backend/pom.xml test
 npm --prefix frontend test
+npm --prefix frontend run build
 ```
 
-The frontend test command runs Vitest unit coverage plus a Playwright responsive
-workflow check. It installs or checks Playwright's managed Chromium
-automatically; set `PLAYWRIGHT_CHROME_CHANNEL=chrome` only when you explicitly
-want to use a locally installed Chrome channel.
+The automated suite covers API validation, cleanup behavior, recording and retry
+flows, comparison caching, editing and responsive layout. It uses fake or mocked
+AI responses and does not call OpenAI. Live voice checks are separate.
 
-## Backend Configuration
+## Scope
 
-Shared backend configuration lives in
-`backend/src/main/resources/application.yml`. It contains non-secret defaults
-and must not activate a Spring profile. Local runs and deployments choose a
-profile externally, for example:
+Voice Draft currently targets English plain text and short recordings up to ten
+minutes and 25 MB. It supports the exact standalone command “new paragraph.”
+Other spoken editing commands are preserved as text.
 
-```bash
-SPRING_PROFILES_ACTIVE=dev mvn -f backend/pom.xml spring-boot:run
-SPRING_PROFILES_ACTIVE=prod OPENAI_API_KEY=... mvn -f backend/pom.xml spring-boot:run
-```
+Results live in browser memory. There are no accounts, saved history or realtime
+transcription. Review the output before using it.
 
-The supported profiles are:
-
-- `dev` - uses `app.ai.provider-mode=fake` for local development without live
-  provider calls.
-- `prod` - uses `app.ai.provider-mode=spring-ai-openai` and backend-owned OpenAI
-  configuration.
-
-Production AI settings are environment-backed in
-`backend/src/main/resources/application-prod.yml`:
-
-- `OPENAI_API_KEY` - required when `prod` uses the OpenAI-backed transcription
-  and cleanup adapters.
-- `OPENAI_TRANSCRIPTION_MODEL` - optional; defaults to
-  `gpt-4o-mini-transcribe`.
-- `OPENAI_CLEANUP_MODEL` - optional; defaults to `gpt-5.4-mini`.
-
-Do not commit real provider credentials. Local secret-bearing files such as
-`application-dev.local.yml` are ignored by git.
-
-## Test And Provider Behavior
-
-Normal automated tests avoid live provider calls. Backend tests use fake or
-mocked transcription and cleanup seams so Cleanup Evaluation Cases can verify
-Raw Transcript to Cleanup Result behavior without audio capture, network access,
-or provider variability. Frontend tests use mocked API responses for Review
-Console workflow states.
-
-Manual provider checks are optional and should be run deliberately. To exercise
-the OpenAI-backed path, start the backend with `SPRING_PROFILES_ACTIVE=prod` and
-a real `OPENAI_API_KEY`, then submit a short browser recording through the
-frontend. That manual check may call paid external services and should not be
-required for routine local development or CI.
-
-### Diagnosing a live cleanup failure
-
-Restart the backend after changing its code, then run the production-profile
-command above and submit a short recording. Each failed cleanup attempt is
-written to the backend console at `WARN` level with its validation or provider
-error and stack trace. Audio and Raw Transcript are not deliberately logged.
-
-The backend owns `rawTranscript` in the returned Cleanup Result. The cleanup
-model returns only `cleanedText` and `uncertainties`, so a model cannot fail a
-request by changing its copy of the raw transcript.
-
-## MVP Boundaries
-
-The MVP is English-First Cleanup and Plain Text Cleanup. Conservative Cleanup
-removes Disfluency Fillers, applies Punctuation Inference, fixes clear Speech
-Artifacts, preserves Hedging Language and Literal Phrases, and applies only the
-exact standalone Paragraph Command `new paragraph`. Unsupported Spoken Edit
-Commands remain content.
-
-Out of scope for the MVP:
-
-- realtime transcription, live partial transcript deltas, WebRTC provider
-  sessions, backend-mediated streaming, or streaming API endpoints
-- production Web Speech API transcription as the main path
-- browser-owned provider keys or direct browser calls to provider APIs
-- user-supplied provider API keys
-- multiple providers, provider selectors, model selectors, or credential
-  controls in the UI
-- persistence of audio, Raw Transcript, Cleaned Text, edit history, accepted
-  results, exports, history, search, folders, or retention controls
-- authentication, accounts, teams, permissions, or multi-user behavior
-- deployment targets, infrastructure, and runtime operations beyond the `dev`
-  and `prod` profile convention
-- Style Actions such as summarize, formalize, shorten, change tone, or convert
-  to bullets
-- generated Markdown formatting, headings, bullets, bold text, code spans, or
-  rich text output
-- spoken edit command execution beyond the Paragraph Command
+See the [development guide](docs/development.md) for API contracts, configuration,
+retry details and troubleshooting, and the [domain notes](CONTEXT.md) for the
+cleanup rules.

@@ -12,10 +12,10 @@
   </parent>
 
   <groupId>com.igrgin</groupId>
-  <artifactId>smart-ai-text-to-speach-backend</artifactId>
+  <artifactId>voice-draft-backend</artifactId>
   <version>0.1.0-SNAPSHOT</version>
-  <name>smart-ai-text-to-speach-backend</name>
-  <description>Backend for turning Raw Transcript audio into Cleaned Text.</description>
+  <name>voice-draft-backend</name>
+  <description>Speech transcription and optional text cleanup with Spring AI.</description>
 
   <properties>
     <java.version>25</java.version>

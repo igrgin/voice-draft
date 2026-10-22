@@ -328,7 +328,7 @@ export function App() {
       <section className="rail" aria-label="Dictation workflow">
         <div>
           <p className="eyebrow">Review Console</p>
-          <h1>Smart AI Text To Speach</h1>
+          <h1>Voice Draft</h1>
         </div>
 
         {phase === "recording" ? (

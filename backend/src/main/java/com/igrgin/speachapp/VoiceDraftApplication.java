@@ -6,9 +6,9 @@ import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
 @SpringBootApplication
 @ConfigurationPropertiesScan
-public class SmartAiTextToSpeachApplication {
+public class VoiceDraftApplication {
 
   public static void main(String[] args) {
-    SpringApplication.run(SmartAiTextToSpeachApplication.class, args);
+    SpringApplication.run(VoiceDraftApplication.class, args);
   }
 }
