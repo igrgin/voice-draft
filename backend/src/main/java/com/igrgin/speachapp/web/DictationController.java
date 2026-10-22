@@ -7,6 +7,7 @@ import com.igrgin.speachapp.dictation.DictationService;
 import java.io.IOException;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
@@ -22,6 +23,18 @@ public class DictationController {
     this.properties = properties;
   }
 
+  @PostMapping(path = "/api/cleanups", consumes = MediaType.APPLICATION_JSON_VALUE,
+      produces = MediaType.APPLICATION_JSON_VALUE)
+  public CleanupResult cleanTranscript(@RequestBody CleanupRequest request) {
+    if (request.rawTranscript() == null || request.rawTranscript().isBlank()
+        || request.rawTranscript().length() > 100_000) {
+      throw ApiProblem.badRequest("invalid_transcript", "Raw Transcript must contain 1 to 100,000 characters of text.");
+    }
+    return dictationService.cleanTranscript(request.rawTranscript());
+  }
+
+  public record CleanupRequest(String rawTranscript) {}
+
   @PostMapping(
       path = "/api/dictations",
       consumes = MediaType.MULTIPART_FORM_DATA_VALUE,
@@ -30,7 +43,8 @@ public class DictationController {
   public CleanupResult createDictation(
       @RequestPart("audio") MultipartFile audio,
       @RequestParam(required = false) String recordingMimeType,
-      @RequestParam(required = false) Double durationSeconds
+      @RequestParam(required = false) Double durationSeconds,
+      @RequestParam(defaultValue = "true") boolean cleanupEnabled
   ) throws IOException {
     String contentType = audio.getContentType();
     validateAudio(audio, contentType, recordingMimeType, durationSeconds);
@@ -40,7 +54,7 @@ public class DictationController {
         contentType,
         recordingMimeType,
         durationSeconds
-    ));
+    ), cleanupEnabled);
   }
 
   private void validateAudio(

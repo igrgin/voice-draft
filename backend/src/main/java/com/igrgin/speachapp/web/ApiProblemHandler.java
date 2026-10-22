@@ -4,6 +4,7 @@ import com.igrgin.speachapp.cleanup.CleanupProviderUnavailableException;
 import com.igrgin.speachapp.transcription.TranscriptionProviderUnavailableException;
 import java.net.URI;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
@@ -13,6 +14,11 @@ import org.springframework.web.multipart.support.MissingServletRequestPartExcept
 
 @RestControllerAdvice
 public class ApiProblemHandler {
+  @ExceptionHandler(HttpMessageNotReadableException.class)
+  ProblemDetail handleUnreadableRequest(HttpMessageNotReadableException exception) {
+    return handleApiProblem(ApiProblem.badRequest("invalid_request", "The request must contain a valid JSON body."));
+  }
+
   @ExceptionHandler(ApiProblem.class)
   ProblemDetail handleApiProblem(ApiProblem problem) {
     ProblemDetail detail = ProblemDetail.forStatusAndDetail(problem.status(), problem.getMessage());

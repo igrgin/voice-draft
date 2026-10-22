@@ -120,6 +120,11 @@ async function installMockedDictationWorkflow(page: Page) {
     });
   });
 
+  await page.route("**/api/cleanups", async (route) => {
+    expect(route.request().postDataJSON()).toEqual({ rawTranscript: mockCleanupResult().rawTranscript });
+    await route.fulfill({ contentType: "application/json", body: JSON.stringify(mockCleanupResult()) });
+  });
+
   return dictationRequests;
 }
 

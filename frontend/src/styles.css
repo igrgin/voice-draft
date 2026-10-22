@@ -381,3 +381,65 @@ textarea::placeholder {
   color: var(--muted);
   opacity: 1;
 }
+
+.cleanup-settings {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.cleanup-settings p {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.cleanup-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cleanup-toggle input {
+  appearance: none;
+  flex-shrink: 0;
+  width: 2.5rem;
+  height: 1.5rem;
+  margin: 0;
+  padding: 0.15rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--muted);
+  cursor: pointer;
+}
+
+.cleanup-toggle input::before {
+  content: "";
+  display: block;
+  width: 1.05rem;
+  height: 1.05rem;
+  border-radius: 50%;
+  background: #ffffff;
+  transition: transform 120ms ease;
+}
+
+.cleanup-toggle input:checked {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+}
+
+.cleanup-toggle input:checked::before {
+  transform: translateX(1rem);
+}
+
+.cleanup-toggle input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.cleanup-toggle input:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}

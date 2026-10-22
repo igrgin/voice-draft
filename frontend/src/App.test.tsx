@@ -106,24 +106,100 @@ test("requests microphone permission only on start, records with a probed MIME t
   expectNoProviderControls();
 });
 
-test("shows upload, transcription, cleanup, and review progress states", async () => {
-  const stopTrack = vi.fn();
-  stubMediaDevices(vi.fn(async () => mediaStreamWithStop(stopTrack)));
-  const pendingResponse = deferred<Response>();
-  vi.stubGlobal("fetch", vi.fn(() => pendingResponse.promise));
-
+test("shows progress only when each actual request is running", async () => {
+  stubMediaDevices(vi.fn(async () => mediaStreamWithStop(vi.fn())));
+  const transcription = deferred<Response>();
+  const cleanup = deferred<Response>();
+  const fetchMock = vi.fn().mockReturnValueOnce(transcription.promise).mockReturnValueOnce(cleanup.promise);
+  vi.stubGlobal("fetch", fetchMock);
   render(<App />);
-
   await recordOnce();
-
-  expect(await screen.findByText("Uploading audio")).toBeInTheDocument();
-  expect(await screen.findByText("Transcribing audio")).toBeInTheDocument();
+  expect(screen.getByText("Uploading and transcribing audio")).toBeInTheDocument();
+  await new Promise((resolve) => setTimeout(resolve, 900));
+  expect(screen.queryByText("Cleaning transcript")).not.toBeInTheDocument();
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  transcription.resolve(jsonResponse(mockCleanupResult()));
   expect(await screen.findByText("Cleaning transcript")).toBeInTheDocument();
-
-  pendingResponse.resolve(jsonResponse(mockCleanupResult()));
-
+  cleanup.resolve(jsonResponse(mockCleanupResult()));
   expect(await screen.findByDisplayValue(MOCK_CLEANED_TEXT)).toBeInTheDocument();
   expect(screen.getByText("Ready for review")).toBeInTheDocument();
+});
+
+test("compares cleanup against one exact transcript, caches results, and preserves separate edits", async () => {
+  const getUserMedia = vi.fn(async () => mediaStreamWithStop(vi.fn()));
+  stubMediaDevices(getUserMedia);
+  const raw = " Um, I think so. New paragraph. Ah, tomorrow.\n";
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(jsonResponse({ rawTranscript: raw, cleanedText: raw, uncertainties: [] }))
+    .mockResolvedValueOnce(jsonResponse({ ...mockCleanupResult(), rawTranscript: raw }));
+  vi.stubGlobal("fetch", fetchMock);
+  render(<App />);
+  const toggle = screen.getByRole("switch", { name: "AI cleanup" });
+  await userEvent.click(toggle);
+  await userEvent.click(screen.getByRole("button", { name: /start recording/i }));
+  expect(toggle).toBeDisabled();
+  await userEvent.click(screen.getByRole("button", { name: /stop recording/i }));
+  const transcription = await screen.findByRole("textbox", { name: "Transcription" });
+  expect(transcription).toHaveValue(raw);
+  expect((fetchMock.mock.calls[0][1].body as FormData).get("cleanupEnabled")).toBe("false");
+  await userEvent.clear(transcription);
+  await userEvent.type(transcription, "My raw view edit");
+  await userEvent.click(toggle);
+  const cleaned = await screen.findByRole("textbox", { name: "Cleaned Text" });
+  expect(cleaned).toHaveValue(MOCK_CLEANED_TEXT);
+  expect(fetchMock.mock.calls[1]).toEqual(["/api/cleanups", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rawTranscript: raw }),
+  }]);
+  await userEvent.clear(cleaned);
+  await userEvent.type(cleaned, "My cleaned view edit");
+  await userEvent.click(toggle);
+  expect(screen.getByRole("textbox", { name: "Transcription" })).toHaveValue("My raw view edit");
+  await userEvent.click(toggle);
+  expect(screen.getByRole("textbox", { name: "Cleaned Text" })).toHaveValue("My cleaned view edit");
+  await userEvent.click(screen.getByRole("tab", { name: "Raw Transcript" }));
+  expect(screen.getByLabelText("Raw Transcript").textContent).toBe(raw);
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+  expect(getUserMedia).toHaveBeenCalledTimes(1);
+});
+
+test("a new recording resets the previous transcript and cleanup cache", async () => {
+  stubMediaDevices(vi.fn(async () => mediaStreamWithStop(vi.fn())));
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(jsonResponse(mockCleanupResult()))
+    .mockResolvedValueOnce(jsonResponse(mockCleanupResult()))
+    .mockResolvedValueOnce(jsonResponse({ rawTranscript: "second recording", cleanedText: "second recording", uncertainties: [] }))
+    .mockResolvedValueOnce(jsonResponse({ rawTranscript: "second recording", cleanedText: "Second recording.", uncertainties: [] }));
+  vi.stubGlobal("fetch", fetchMock);
+  render(<App />);
+  await recordOnce();
+  await screen.findByDisplayValue(MOCK_CLEANED_TEXT);
+  await recordOnce();
+  expect(await screen.findByDisplayValue("Second recording.")).toBeInTheDocument();
+  expect(JSON.parse(fetchMock.mock.calls[3][1].body as string)).toEqual({ rawTranscript: "second recording" });
+  expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(["/api/dictations", "/api/cleanups", "/api/dictations", "/api/cleanups"]);
+});
+
+test("retains the transcript after cleanup failure and allows transcription-only review", async () => {
+  stubMediaDevices(vi.fn(async () => mediaStreamWithStop(vi.fn())));
+  const raw = mockCleanupResult().rawTranscript;
+  const fetchMock = vi.fn()
+    .mockResolvedValueOnce(jsonResponse(mockCleanupResult()))
+    .mockResolvedValueOnce(jsonResponse({ code: "cleanup_provider_unavailable", detail: "Try again", retryable: true }, 503))
+    .mockResolvedValueOnce(jsonResponse(mockCleanupResult()));
+  vi.stubGlobal("fetch", fetchMock);
+  render(<App />);
+  await recordOnce();
+  expect(await screen.findByRole("button", { name: "Retry cleanup" })).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("tab", { name: "Raw Transcript" }));
+  expect(screen.getByLabelText("Raw Transcript").textContent).toBe(raw);
+  await userEvent.click(screen.getByRole("switch", { name: "AI cleanup" }));
+  expect(screen.getByRole("textbox", { name: "Transcription" })).toHaveValue(raw);
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+  await userEvent.click(screen.getByRole("switch", { name: "AI cleanup" }));
+  expect(await screen.findByDisplayValue(MOCK_CLEANED_TEXT)).toBeInTheDocument();
+  expect(fetchMock.mock.calls[2][0]).toBe("/api/cleanups");
+  expect(JSON.parse(fetchMock.mock.calls[2][1].body as string)).toEqual({ rawTranscript: raw });
 });
 
 test("explains unsupported browser recording and validation failures without retry controls", async () => {
@@ -196,7 +272,7 @@ test("stops tracks when recorder setup fails and blocks oversized recordings bef
 });
 
 test("offers retry controls for retryable transcription and cleanup failures", async () => {
-  await expectRetryableProblem("transcription_provider_unavailable", "Retry transcription", "Transcribing audio");
+  await expectRetryableProblem("transcription_provider_unavailable", "Retry processing", "Uploading and transcribing audio");
   await expectRetryableProblem("cleanup_provider_unavailable", "Retry cleanup", "Cleaning transcript");
 });
 
@@ -275,20 +351,15 @@ async function expectRetryableProblem(code: string, buttonName: string, retrySta
   vi.stubGlobal("MediaRecorder", FakeMediaRecorder);
   stubMediaDevices(vi.fn(async () => mediaStreamWithStop(vi.fn())));
   const retryResponse = deferred<Response>();
-  const fetchMock = vi
-    .fn()
-    .mockResolvedValueOnce(
-      jsonResponse(
-        {
-          status: 503,
-          detail: `${code} can be retried.`,
-          code,
-          retryable: true,
-        },
-        503,
-      ),
-    )
-    .mockReturnValueOnce(retryResponse.promise);
+  const failure = jsonResponse({ status: 503, detail: `${code} can be retried.`, code, retryable: true }, 503);
+  const fetchMock = vi.fn();
+  if (code === "cleanup_provider_unavailable") {
+    fetchMock.mockResolvedValueOnce(jsonResponse(mockCleanupResult()))
+      .mockResolvedValueOnce(failure).mockReturnValueOnce(retryResponse.promise);
+  } else {
+    fetchMock.mockResolvedValueOnce(failure).mockReturnValueOnce(retryResponse.promise)
+      .mockResolvedValueOnce(jsonResponse(mockCleanupResult()));
+  }
   vi.stubGlobal("fetch", fetchMock);
   const { unmount } = render(<App />);
 
@@ -300,7 +371,10 @@ async function expectRetryableProblem(code: string, buttonName: string, retrySta
   expect(await screen.findByText(retryState)).toBeInTheDocument();
   retryResponse.resolve(jsonResponse(mockCleanupResult()));
   expect(await screen.findByDisplayValue(MOCK_CLEANED_TEXT)).toBeInTheDocument();
-  await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+  expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(code === "cleanup_provider_unavailable"
+    ? ["/api/dictations", "/api/cleanups", "/api/cleanups"]
+    : ["/api/dictations", "/api/dictations", "/api/cleanups"]);
   unmount();
 }
 

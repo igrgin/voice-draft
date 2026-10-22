@@ -38,6 +38,37 @@ class DictationControllerSmokeTest {
   private MockMvc mockMvc;
 
   @Test
+  void cleansSavedTranscriptAndPreservesItsExactWhitespace() throws Exception {
+    mockMvc.perform(post("/api/cleanups").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"rawTranscript\":\" um hello\\n\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.rawTranscript", equalTo(" um hello\n")))
+        .andExpect(jsonPath("$.cleanedText", startsWith("This is a quick note")));
+  }
+
+  @Test
+  void rejectsMissingBlankAndOversizedTranscript() throws Exception {
+    for (String body : List.of("{}", "{\"rawTranscript\":null}", "{\"rawTranscript\":\"   \"}",
+        "{\"rawTranscript\":\"" + "x".repeat(100_001) + "\"}")) {
+      expectProblem(mockMvc.perform(post("/api/cleanups").contentType(MediaType.APPLICATION_JSON).content(body)),
+          status().isBadRequest(), "invalid_transcript", false);
+    }
+  }
+
+  @Test
+  void rejectsMalformedCleanupJson() throws Exception {
+    expectProblem(mockMvc.perform(post("/api/cleanups").contentType(MediaType.APPLICATION_JSON).content("{")),
+        status().isBadRequest(), "invalid_request", false);
+  }
+
+  @Test
+  void reportsCleanupOnlyProviderFailureAsRetryable() throws Exception {
+    expectProblem(mockMvc.perform(post("/api/cleanups").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"rawTranscript\":\"simulate cleanup provider failure\"}")),
+        status().isServiceUnavailable(), "cleanup_provider_unavailable", true);
+  }
+
+  @Test
   void returnsCannedCleanupResultWithoutLiveProviderCalls() throws Exception {
     MockMultipartFile audio = webmAudio("fake-browser-audio");
 
@@ -52,6 +83,17 @@ class DictationControllerSmokeTest {
         .andExpect(jsonPath("$.uncertainties", hasSize(1)))
         .andExpect(jsonPath("$.uncertainties[0].text", equalTo("maybe")))
         .andExpect(jsonPath("$.uncertainties[0].reasonCategory", equalTo("HEDGING_LANGUAGE")));
+  }
+
+  @Test
+  void acceptsTranscriptionOnlyRequestEvenWhenTheCleanerWouldFail() throws Exception {
+    mockMvc.perform(multipart("/api/dictations")
+            .file(webmAudio("simulate-cleanup-provider-failure"))
+            .param("cleanupEnabled", "false"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.rawTranscript", equalTo("simulate cleanup provider failure")))
+        .andExpect(jsonPath("$.cleanedText", equalTo("simulate cleanup provider failure")))
+        .andExpect(jsonPath("$.uncertainties", hasSize(0)));
   }
 
   @Test

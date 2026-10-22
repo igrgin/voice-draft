@@ -8,12 +8,12 @@ import {
   Mic,
   RotateCcw,
   Square,
-  UploadCloud,
   Waves,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createDictation,
+  cleanTranscript,
   DictationProblemError,
   MAX_AUDIO_BYTES,
   MAX_RECORDING_SECONDS,
@@ -25,7 +25,7 @@ import {
 import { ThemePicker } from "./ThemePicker";
 
 type WorkflowPhase = "idle" | "recording" | "processing" | "review" | "error";
-type ProcessingStep = "uploading" | "transcribing" | "cleaning";
+type ProcessingStep = "transcribing" | "cleaning";
 type OutputAction = "copied" | "exported" | null;
 type ProblemState = {
   message: string;
@@ -36,9 +36,12 @@ type RecordedAudio = {
   blob: Blob;
   mimeType: RecordingMimeType;
   durationSeconds: number;
+  cleanupEnabled: boolean;
 };
 
 export function App() {
+  const [cleanupEnabled, setCleanupEnabled] = useState(true);
+  const [runCleanupEnabled, setRunCleanupEnabled] = useState(true);
   const [phase, setPhase] = useState<WorkflowPhase>("idle");
   const [processingStep, setProcessingStep] = useState<ProcessingStep | null>(null);
   const [result, setResult] = useState<CleanupResult | null>(null);
@@ -51,17 +54,21 @@ export function App() {
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const recordingStartedAtRef = useRef<number>(0);
-  const progressTimersRef = useRef<number[]>([]);
+  const rawTranscriptRef = useRef<string | null>(null);
+  const cleanedResultRef = useRef<CleanupResult | null>(null);
+  const draftsRef = useRef<{ raw?: string; cleaned?: string }>({});
   const recordingLimitTimerRef = useRef<number | null>(null);
   const lastRecordingRef = useRef<RecordedAudio | null>(null);
 
   useEffect(() => {
     return () => {
-      clearProgressTimers();
       clearRecordingLimitTimer();
       stopStreamTracks();
     };
   }, []);
+
+  const outputLabel = (result ? runCleanupEnabled : cleanupEnabled) ? "Cleaned Text" : "Transcription";
+  const busy = phase === "recording" || phase === "processing";
 
   const stateSummary = useMemo(
     () => ({
@@ -69,15 +76,16 @@ export function App() {
       reviewOwner: "frontend local review",
       phase,
       processingStep,
+      cleanupEnabled: runCleanupEnabled,
       recordingMimeType,
-      rawTranscriptPresent: Boolean(result?.rawTranscript),
+      rawTranscriptPresent: rawTranscriptRef.current !== null,
       cleanedTextPresent: Boolean(result?.cleanedText),
       editedTextLength: editedCleanedText.length,
       uncertaintyCount: result?.uncertainties.length ?? 0,
       retryableProblem: problem?.retryable ?? false,
       outputAction,
     }),
-    [editedCleanedText.length, outputAction, phase, problem?.retryable, processingStep, recordingMimeType, result],
+    [editedCleanedText.length, outputAction, phase, problem?.retryable, processingStep, recordingMimeType, result, runCleanupEnabled],
   );
 
   async function startRecording() {
@@ -99,6 +107,10 @@ export function App() {
       const recorder = new MediaRecorder(stream, { mimeType: selectedMimeType });
 
       chunksRef.current = [];
+      rawTranscriptRef.current = null;
+      cleanedResultRef.current = null;
+      draftsRef.current = {};
+      lastRecordingRef.current = null;
       mediaRecorderRef.current = recorder;
       recordingStartedAtRef.current = performance.now();
       setProblem(null);
@@ -106,6 +118,7 @@ export function App() {
       setEditedCleanedText("");
       setOutputAction(null);
       setProcessingStep(null);
+      setRunCleanupEnabled(cleanupEnabled);
       setPhase("recording");
 
       recorder.ondataavailable = (event) => {
@@ -116,7 +129,7 @@ export function App() {
       recorder.onstop = () => {
         const durationSeconds = Math.max(0.1, (performance.now() - recordingStartedAtRef.current) / 1000);
         const audio = new Blob(chunksRef.current, { type: selectedMimeType });
-        const recordedAudio = { blob: audio, mimeType: selectedMimeType, durationSeconds };
+        const recordedAudio = { blob: audio, mimeType: selectedMimeType, durationSeconds, cleanupEnabled };
         const validationProblem = validateRecordedAudio(recordedAudio);
 
         if (validationProblem) {
@@ -125,7 +138,7 @@ export function App() {
         }
 
         lastRecordingRef.current = recordedAudio;
-        void processRecording(recordedAudio, "uploading");
+        void processRecording(recordedAudio);
       };
 
       recorder.start();
@@ -183,57 +196,72 @@ export function App() {
   }
 
   async function retryLastRecording() {
-    if (!lastRecordingRef.current || !problem?.retryable) {
-      return;
+    if (!lastRecordingRef.current || !problem?.retryable || busy) return;
+    if (rawTranscriptRef.current !== null) {
+      await processTranscript(runCleanupEnabled);
+    } else {
+      await processRecording({ ...lastRecordingRef.current, cleanupEnabled });
     }
-
-    const retryStep = problem.code === "cleanup_provider_unavailable" ? "cleaning" : "transcribing";
-    await processRecording(lastRecordingRef.current, retryStep);
   }
 
-  async function processRecording(recordedAudio: RecordedAudio, initialStep: ProcessingStep) {
-    queueProcessingProgress(initialStep);
-    setPhase("processing");
-    setProblem(null);
+  async function changeCleanupMode(enabled: boolean) {
+    setCleanupEnabled(enabled);
+    if (rawTranscriptRef.current !== null) await processTranscript(enabled);
+  }
 
+  function showResult(nextResult: CleanupResult, applyCleanup: boolean) {
+    setResult(nextResult);
+    setEditedCleanedText((applyCleanup ? draftsRef.current.cleaned : draftsRef.current.raw) ?? nextResult.cleanedText);
+    setOutputAction(null);
+    setProcessingStep(null);
+    setActiveTab("cleaned");
+    setPhase("review");
+  }
+
+  async function processTranscript(applyCleanup: boolean) {
+    const raw = rawTranscriptRef.current;
+    if (raw === null) return;
+    setRunCleanupEnabled(applyCleanup);
+    setProblem(null);
+    setOutputAction(null);
+    setResult(null);
+    setEditedCleanedText("");
+    if (!applyCleanup) {
+      showResult({ rawTranscript: raw, cleanedText: raw, uncertainties: [] }, false);
+      return;
+    }
+    if (cleanedResultRef.current) {
+      showResult(cleanedResultRef.current, true);
+      return;
+    }
+    setPhase("processing");
+    setProcessingStep("cleaning");
     try {
-      const cleanupResult = await createDictation(recordedAudio.blob, {
-        recordingMimeType: recordedAudio.mimeType,
-        durationSeconds: recordedAudio.durationSeconds,
-      });
-      clearProgressTimers();
-      setProcessingStep(null);
-      setResult(cleanupResult);
-      setEditedCleanedText(cleanupResult.cleanedText);
-      setOutputAction(null);
-      setActiveTab("cleaned");
-      setPhase("review");
+      const cleaned = await cleanTranscript(raw);
+      cleanedResultRef.current = cleaned;
+      showResult(cleaned, true);
     } catch (requestError) {
-      clearProgressTimers();
       showProblem(problemFromError(requestError));
     }
   }
 
-  function queueProcessingProgress(initialStep: ProcessingStep) {
-    clearProgressTimers();
-    setProcessingStep(initialStep);
-
-    if (initialStep === "uploading") {
-      progressTimersRef.current.push(window.setTimeout(() => setProcessingStep("transcribing"), 350));
-      progressTimersRef.current.push(window.setTimeout(() => setProcessingStep("cleaning"), 800));
+  async function processRecording(recordedAudio: RecordedAudio) {
+    setRunCleanupEnabled(recordedAudio.cleanupEnabled);
+    setOutputAction(null);
+    setProcessingStep("transcribing");
+    setPhase("processing");
+    setProblem(null);
+    try {
+      const transcription = await createDictation(recordedAudio.blob, {
+        recordingMimeType: recordedAudio.mimeType,
+        durationSeconds: recordedAudio.durationSeconds,
+        cleanupEnabled: false,
+      });
+      rawTranscriptRef.current = transcription.rawTranscript;
+      await processTranscript(recordedAudio.cleanupEnabled);
+    } catch (requestError) {
+      showProblem(problemFromError(requestError));
     }
-
-    if (initialStep === "transcribing") {
-      progressTimersRef.current.push(window.setTimeout(() => setProcessingStep("cleaning"), 650));
-    }
-  }
-
-  function clearProgressTimers() {
-    for (const timer of progressTimersRef.current) {
-      window.clearTimeout(timer);
-    }
-
-    progressTimersRef.current = [];
   }
 
   function clearRecordingLimitTimer() {
@@ -252,7 +280,6 @@ export function App() {
   }
 
   function showProblem(nextProblem: ProblemState) {
-    clearProgressTimers();
     setProcessingStep(null);
     setProblem(nextProblem);
     setPhase("error");
@@ -274,7 +301,7 @@ export function App() {
       showProblem({
         code: "copy_unavailable",
         retryable: false,
-        message: "Cleaned Text could not be copied by this browser.",
+        message: `${outputLabel} could not be copied by this browser.`,
       });
     }
   }
@@ -288,7 +315,7 @@ export function App() {
     const exportUrl = URL.createObjectURL(exportBlob);
     const exportLink = document.createElement("a");
     exportLink.href = exportUrl;
-    exportLink.download = "cleaned-text.txt";
+    exportLink.download = runCleanupEnabled ? "cleaned-text.txt" : "transcription.txt";
     document.body.append(exportLink);
     exportLink.click();
     exportLink.remove();
@@ -316,35 +343,50 @@ export function App() {
           </button>
         )}
 
+        <div className="cleanup-settings">
+          <label className="cleanup-toggle">
+            <span>AI cleanup</span>
+            <input
+              type="checkbox"
+              role="switch"
+              checked={cleanupEnabled}
+              onChange={(event) => void changeCleanupMode(event.target.checked)}
+              disabled={busy}
+              aria-describedby="cleanup-description"
+            />
+          </label>
+          <p id="cleanup-description" className="muted">
+            {cleanupEnabled ? "Remove fillers and apply spoken paragraph commands." : "Transcription only, exactly as returned."}
+          </p>
+          <p className="muted">Switch modes to compare the same transcript. Edits are kept separately.</p>
+        </div>
+
         <ol className="steps" aria-label="Workflow progress">
           <Step icon={<Mic aria-hidden />} label="Record" active={phase === "recording"} complete={phase === "processing" || phase === "review"} />
           <Step
-            icon={<UploadCloud aria-hidden />}
-            label="Upload"
-            active={processingStep === "uploading"}
-            complete={isStepComplete("uploading", processingStep, phase)}
-          />
-          <Step
             icon={<Waves aria-hidden />}
-            label="Transcription"
+            label="Upload & transcribe"
             active={processingStep === "transcribing"}
             complete={isStepComplete("transcribing", processingStep, phase)}
           />
-          <Step
-            icon={<Loader2 aria-hidden className={processingStep === "cleaning" ? "spin" : undefined} />}
-            label="Cleanup"
-            active={processingStep === "cleaning"}
-            complete={phase === "review"}
-          />
+          {(busy || result ? runCleanupEnabled : cleanupEnabled) && (
+            <Step
+              icon={<Loader2 aria-hidden className={processingStep === "cleaning" ? "spin" : undefined} />}
+              label="Cleanup"
+              active={processingStep === "cleaning"}
+              complete={phase === "review"}
+            />
+          )}
           <Step icon={<FileText aria-hidden />} label="Review" active={phase === "review"} complete={phase === "review"} />
         </ol>
+
         <ThemePicker />
       </section>
 
       <section className="workspace" aria-label="Cleanup Result">
         <div className="tabs" role="tablist" aria-label="Cleanup Result views">
           <TabButton active={activeTab === "cleaned"} onClick={() => setActiveTab("cleaned")}>
-            Cleaned Text
+            {outputLabel}
           </TabButton>
           <TabButton active={activeTab === "raw"} onClick={() => setActiveTab("raw")}>
             Raw Transcript
@@ -357,18 +399,19 @@ export function App() {
         <article className="text-surface">
           {activeTab === "cleaned" && (
             <textarea
-              aria-label="Cleaned Text"
+              aria-label={outputLabel}
               value={editedCleanedText}
               onChange={(event) => {
                 setEditedCleanedText(event.target.value);
+                draftsRef.current[runCleanupEnabled ? "cleaned" : "raw"] = event.target.value;
                 setOutputAction(null);
               }}
-              readOnly={!result}
-              placeholder="Record audio to see Cleaned Text."
+              readOnly={!result || busy}
+              placeholder={`Record audio to see ${outputLabel}.`}
             />
           )}
           {activeTab === "raw" && (
-            <pre aria-label="Raw Transcript">{result?.rawTranscript ?? "Raw Transcript will appear after upload."}</pre>
+            <pre aria-label="Raw Transcript">{rawTranscriptRef.current ?? "Raw Transcript will appear after upload."}</pre>
           )}
           {activeTab === "state" && <pre aria-label="State">{JSON.stringify(stateSummary, null, 2)}</pre>}
         </article>
@@ -396,23 +439,23 @@ export function App() {
         {problem?.retryable && lastRecordingRef.current && (
           <button className="secondary-action" onClick={retryLastRecording}>
             <RotateCcw aria-hidden />
-            <span>{problem.code === "cleanup_provider_unavailable" ? "Retry cleanup" : "Retry transcription"}</span>
+            <span>{rawTranscriptRef.current !== null ? "Retry cleanup" : "Retry processing"}</span>
           </button>
         )}
 
         <div>
           <p className="card-label">Output</p>
           <div className="output-actions">
-            <button className="secondary-action" onClick={copyEditedCleanedText} disabled={!result} aria-label="Copy Cleaned Text">
+            <button className="secondary-action" onClick={copyEditedCleanedText} disabled={!result || busy} aria-label={`Copy ${outputLabel}`}>
               <Clipboard aria-hidden />
               <span>Copy</span>
             </button>
-            <button className="secondary-action" onClick={exportEditedCleanedText} disabled={!result} aria-label="Export Cleaned Text">
+            <button className="secondary-action" onClick={exportEditedCleanedText} disabled={!result || busy} aria-label={`Export ${outputLabel}`}>
               <Download aria-hidden />
               <span>Export</span>
             </button>
           </div>
-          <p className="muted">{outputStatusText(outputAction, Boolean(result))}</p>
+          <p className="muted">{outputStatusText(outputAction, Boolean(result), outputLabel)}</p>
         </div>
 
         <div>
@@ -428,7 +471,7 @@ export function App() {
               ))}
             </ul>
           ) : (
-            <p className="muted">No review signals yet.</p>
+            <p className="muted">{result && !runCleanupEnabled ? "AI cleanup was skipped for this recording." : "No review signals yet."}</p>
           )}
         </div>
       </aside>
@@ -436,13 +479,13 @@ export function App() {
   );
 }
 
-function outputStatusText(outputAction: OutputAction, hasResult: boolean) {
+function outputStatusText(outputAction: OutputAction, hasResult: boolean, outputLabel: string) {
   if (outputAction === "copied") {
-    return "Copied edited Cleaned Text.";
+    return `Copied edited ${outputLabel}.`;
   }
 
   if (outputAction === "exported") {
-    return "Exported edited Cleaned Text.";
+    return `Exported edited ${outputLabel}.`;
   }
 
   return hasResult ? "Waiting for local output." : "Waiting for review.";
@@ -467,7 +510,7 @@ function problemFromError(error: unknown): ProblemState {
 
   return {
     code: "dictation_request_failed",
-    retryable: false,
+    retryable: error instanceof TypeError,
     message: error instanceof Error ? error.message : "Dictation request failed.",
   };
 }
@@ -485,12 +528,8 @@ function statusText(phase: WorkflowPhase, processingStep: ProcessingStep | null)
     return "Needs attention";
   }
 
-  if (processingStep === "uploading") {
-    return "Uploading audio";
-  }
-
   if (processingStep === "transcribing") {
-    return "Transcribing audio";
+    return "Uploading and transcribing audio";
   }
 
   if (processingStep === "cleaning") {
@@ -505,7 +544,7 @@ function isStepComplete(step: ProcessingStep, currentStep: ProcessingStep | null
     return true;
   }
 
-  const order: ProcessingStep[] = ["uploading", "transcribing", "cleaning"];
+  const order: ProcessingStep[] = ["transcribing", "cleaning"];
   return currentStep !== null && order.indexOf(currentStep) > order.indexOf(step);
 }
 

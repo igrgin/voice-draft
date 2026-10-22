@@ -55,11 +55,13 @@ export async function createDictation(
   options: {
     recordingMimeType: RecordingMimeType;
     durationSeconds?: number;
+    cleanupEnabled?: boolean;
   },
 ): Promise<CleanupResult> {
   const formData = new FormData();
   formData.append("audio", audio, `browser-recording.${extensionForMimeType(options.recordingMimeType)}`);
   formData.append("recordingMimeType", options.recordingMimeType);
+  formData.append("cleanupEnabled", String(options.cleanupEnabled ?? true));
 
   if (options.durationSeconds !== undefined) {
     formData.append("durationSeconds", options.durationSeconds.toFixed(1));
@@ -74,6 +76,18 @@ export async function createDictation(
     throw new DictationProblemError(await readProblem(response), response.status);
   }
 
+  return response.json() as Promise<CleanupResult>;
+}
+
+export async function cleanTranscript(rawTranscript: string): Promise<CleanupResult> {
+  const response = await fetch("/api/cleanups", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ rawTranscript }),
+  });
+  if (!response.ok) {
+    throw new DictationProblemError(await readProblem(response), response.status);
+  }
   return response.json() as Promise<CleanupResult>;
 }
 
