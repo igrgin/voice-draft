@@ -10,8 +10,8 @@ public record AiProperties(
 ) {
   public static final String FAKE_PROVIDER_MODE = "fake";
   public static final String SPRING_AI_OPENAI_PROVIDER_MODE = "spring-ai-openai";
-  public static final String DEFAULT_TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe";
-  public static final String DEFAULT_CLEANUP_MODEL = "gpt-5.4-mini";
+  public static final String DEFAULT_TRANSCRIPTION_MODEL = "gpt-transcribe";
+  public static final String DEFAULT_CLEANUP_MODEL = "gpt-6-luna";
 
   public AiProperties {
     if (providerMode == null || providerMode.isBlank()) {

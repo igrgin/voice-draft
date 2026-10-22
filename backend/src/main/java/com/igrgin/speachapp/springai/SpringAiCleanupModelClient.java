@@ -47,6 +47,7 @@ class SpringAiCleanupModelClient implements CleanupModelClient {
     this.chatClient = chatClientBuilder
         .defaultOptions(OpenAiChatOptions.builder()
             .model(properties.cleanupModel())
+            .reasoningEffort("none")
             .temperature(0.0))
         .build();
   }

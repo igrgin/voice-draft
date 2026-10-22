@@ -2,6 +2,7 @@ package com.igrgin.speachapp.transcription;
 
 import com.igrgin.speachapp.config.AiProperties;
 import com.igrgin.speachapp.dictation.DictationRequest;
+import com.openai.models.audio.AudioResponseFormat;
 import java.util.Map;
 import org.springframework.ai.audio.transcription.AudioTranscriptionPrompt;
 import org.springframework.ai.audio.transcription.AudioTranscriptionResponse;
@@ -43,6 +44,7 @@ public class SpringAiOpenAiTranscriptTranscriber implements TranscriptTranscribe
     );
     OpenAiAudioTranscriptionOptions options = OpenAiAudioTranscriptionOptions.builder()
         .model(properties.transcriptionModel())
+        .responseFormat(AudioResponseFormat.JSON)
         .build();
 
     try {

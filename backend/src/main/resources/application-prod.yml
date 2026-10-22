@@ -1,8 +1,8 @@
 app:
   ai:
     provider-mode: spring-ai-openai
-    transcription-model: ${OPENAI_TRANSCRIPTION_MODEL:gpt-4o-mini-transcribe}
-    cleanup-model: ${OPENAI_CLEANUP_MODEL:gpt-5.4-mini}
+    transcription-model: ${OPENAI_TRANSCRIPTION_MODEL:gpt-transcribe}
+    cleanup-model: ${OPENAI_CLEANUP_MODEL:gpt-6-luna}
 
 spring:
   ai:
@@ -21,4 +21,4 @@ spring:
       api-key: ${OPENAI_API_KEY}
       audio:
         transcription:
-          model: ${OPENAI_TRANSCRIPTION_MODEL:gpt-4o-mini-transcribe}
+          model: ${OPENAI_TRANSCRIPTION_MODEL:gpt-transcribe}

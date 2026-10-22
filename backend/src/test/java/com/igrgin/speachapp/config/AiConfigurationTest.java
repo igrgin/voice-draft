@@ -35,9 +35,9 @@ class AiConfigurationTest {
     assertThat(production.getProperty("app.ai.provider-mode"))
         .isEqualTo(AiProperties.SPRING_AI_OPENAI_PROVIDER_MODE);
     assertThat(production.getProperty("app.ai.transcription-model"))
-        .isEqualTo("${OPENAI_TRANSCRIPTION_MODEL:gpt-4o-mini-transcribe}");
+        .isEqualTo("${OPENAI_TRANSCRIPTION_MODEL:gpt-transcribe}");
     assertThat(production.getProperty("app.ai.cleanup-model"))
-        .isEqualTo("${OPENAI_CLEANUP_MODEL:gpt-5.4-mini}");
+        .isEqualTo("${OPENAI_CLEANUP_MODEL:gpt-6-luna}");
     assertThat(production.getProperty("spring.ai.model.audio.transcription")).isEqualTo("openai");
     assertThat(production.getProperty("spring.ai.model.audio.speech")).isEqualTo("none");
     assertThat(production.getProperty("spring.ai.model.chat")).isEqualTo("openai");
@@ -46,7 +46,7 @@ class AiConfigurationTest {
     assertThat(production.getProperty("spring.ai.model.moderation")).isEqualTo("none");
     assertThat(production.getProperty("spring.ai.openai.api-key")).isEqualTo("${OPENAI_API_KEY}");
     assertThat(production.getProperty("spring.ai.openai.audio.transcription.model"))
-        .isEqualTo("${OPENAI_TRANSCRIPTION_MODEL:gpt-4o-mini-transcribe}");
+        .isEqualTo("${OPENAI_TRANSCRIPTION_MODEL:gpt-transcribe}");
   }
 
   private static List<PropertySource<?>> loadYaml(String path) throws IOException {

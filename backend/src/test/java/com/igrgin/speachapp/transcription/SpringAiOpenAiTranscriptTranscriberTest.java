@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import com.igrgin.speachapp.config.AiProperties;
 import com.igrgin.speachapp.dictation.DictationRequest;
+import com.openai.models.audio.AudioResponseFormat;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
@@ -23,7 +24,7 @@ class SpringAiOpenAiTranscriptTranscriberTest {
   private final TranscriptionModel transcriptionModel = org.mockito.Mockito.mock(TranscriptionModel.class);
   private final SpringAiOpenAiTranscriptTranscriber transcriber = new SpringAiOpenAiTranscriptTranscriber(
       transcriptionModel,
-      new AiProperties(AiProperties.SPRING_AI_OPENAI_PROVIDER_MODE, "gpt-4o-mini-transcribe", "gpt-5.4-mini")
+      new AiProperties(AiProperties.SPRING_AI_OPENAI_PROVIDER_MODE, "gpt-transcribe", "gpt-6-luna")
   );
 
   @Test
@@ -48,7 +49,9 @@ class SpringAiOpenAiTranscriptTranscriberTest {
         .isEqualTo("browser-audio".getBytes(StandardCharsets.UTF_8));
     assertThat(prompt.getOptions()).isInstanceOf(OpenAiAudioTranscriptionOptions.class);
     assertThat(((OpenAiAudioTranscriptionOptions) prompt.getOptions()).getModel())
-        .isEqualTo("gpt-4o-mini-transcribe");
+        .isEqualTo("gpt-transcribe");
+    assertThat(((OpenAiAudioTranscriptionOptions) prompt.getOptions()).getResponseFormat())
+        .isEqualTo(AudioResponseFormat.JSON);
   }
 
   @Test
